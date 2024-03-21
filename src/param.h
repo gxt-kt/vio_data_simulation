@@ -9,7 +9,15 @@
 
 class Param {
  public:
-  Param();
+  Param() {
+    // 把body坐标系朝向旋转一下,得到相机坐标系，好让它看到landmark,
+    // 相机坐标系的轴在body坐标系中的表示
+    Eigen::Matrix3d R;
+    // 相机朝着轨迹里面看， 特征点在轨迹外部， 这里我们采用这个
+    R << 0, 0, -1, -1, 0, 0, 0, 1, 0;
+    R_bc = R;
+    t_bc = Eigen::Vector3d(0.05, 0.04, 0.03);
+  };
 
   // time
   int imu_frequency = 200;
@@ -20,9 +28,11 @@ class Param {
   double t_end = 20;  //  20 s
 
   // noise
+  // 参数代表了传感器噪声的标准差
   double gyro_bias_sigma = 1.0e-5;
   double acc_bias_sigma = 0.0001;
 
+  // 参数代表了传感器噪声的标准差
   double gyro_noise_sigma = 0.015;  // rad/s * 1/sqrt(hz)
   double acc_noise_sigma = 0.019;   // 　m/(s^2) * 1/sqrt(hz)
 

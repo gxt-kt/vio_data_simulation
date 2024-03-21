@@ -4,10 +4,13 @@
 
 #include "imu.h"
 
+#include <iomanip>  // 包含头文件以使用 std::setw 和 std::left
 #include <random>
 
 #include "utilities.h"
 
+// 就是欧拉角转换到旋转矩阵，不懂的可以看我之前讲过的内容
+// https://www.bilibili.com/video/BV1y64y1A7zz
 // euler2Rotation:   body frame to interitail frame
 Eigen::Matrix3d euler2Rotation(Eigen::Vector3d eulerAngles) {
   double roll = eulerAngles(0);
@@ -27,6 +30,7 @@ Eigen::Matrix3d euler2Rotation(Eigen::Vector3d eulerAngles) {
   return RIb;
 }
 
+// 惯性系下的欧拉角速度到body的角速度
 Eigen::Matrix3d eulerRates2bodyRates(Eigen::Vector3d eulerAngles) {
   double roll = eulerAngles(0);
   double pitch = eulerAngles(1);
@@ -50,24 +54,30 @@ IMU::IMU(Param p) : param_(p) {
 void IMU::addIMUnoise(MotionData& data) {
   std::random_device rd;
   std::default_random_engine generator_(rd());
+  // 均值为0，方差为1
   std::normal_distribution<double> noise(0.0, 1.0);
 
+  // 角速度的高斯白噪声
   Eigen::Vector3d noise_gyro(noise(generator_), noise(generator_),
                              noise(generator_));
   Eigen::Matrix3d gyro_sqrt_cov =
       param_.gyro_noise_sigma * Eigen::Matrix3d::Identity();
+  // 在imu的角速度项添加高斯白噪声和bias随机游走噪声
   data.imu_gyro = data.imu_gyro +
                   gyro_sqrt_cov * noise_gyro / sqrt(param_.imu_timestep) +
                   gyro_bias_;
 
+  // 加速度的高斯白噪声
   Eigen::Vector3d noise_acc(noise(generator_), noise(generator_),
                             noise(generator_));
   Eigen::Matrix3d acc_sqrt_cov =
       param_.acc_noise_sigma * Eigen::Matrix3d::Identity();
+  // 在imu的加速度项添加高斯白噪声和bias随机游走噪声
   data.imu_acc = data.imu_acc +
                  acc_sqrt_cov * noise_acc / sqrt(param_.imu_timestep) +
                  acc_bias_;
 
+  // 更新角速度随机游走噪声
   // gyro_bias update
   Eigen::Vector3d noise_gyro_bias(noise(generator_), noise(generator_),
                                   noise(generator_));
@@ -75,6 +85,7 @@ void IMU::addIMUnoise(MotionData& data) {
       param_.gyro_bias_sigma * sqrt(param_.imu_timestep) * noise_gyro_bias;
   data.imu_gyro_bias = gyro_bias_;
 
+  // 更新加速度随机游走噪声
   // acc_bias update
   Eigen::Vector3d noise_acc_bias(noise(generator_), noise(generator_),
                                  noise(generator_));
@@ -84,6 +95,11 @@ void IMU::addIMUnoise(MotionData& data) {
 }
 
 MotionData IMU::MotionModel(double t) {
+  // 实际仿出来的位置路径是一个xy组成了椭圆，z呈波浪状
+  // x=15cos(PI/10*t)+5
+  // y=20sin(PI/10*t)+5
+  // z=sin(PI*t)+5
+  // 其中t会从0s走到20s
   MotionData data;
   // param
   float ellipse_x = 15;
@@ -95,12 +111,15 @@ MotionData IMU::MotionModel(double t) {
 
   // translation
   // twb:  body frame in world frame
+  // 模拟当前位置
   Eigen::Vector3d position(ellipse_x * cos(K * t) + 5,
                            ellipse_y * sin(K * t) + 5, z * sin(K1 * K * t) + 5);
+  // 位置的导数（速度）
   Eigen::Vector3d dp(
       -K * ellipse_x * sin(K * t), K * ellipse_y * cos(K * t),
       z * K1 * K * cos(K1 * K * t));  // position导数　in world frame
   double K2 = K * K;
+  // 位置的二阶导数（加速度）
   Eigen::Vector3d ddp(-K2 * ellipse_x * cos(K * t),
                       -K2 * ellipse_y * sin(K * t),
                       -z * K1 * K1 * K2 * sin(K1 * K * t));  // position二阶导数
@@ -108,9 +127,11 @@ MotionData IMU::MotionModel(double t) {
   // Rotation
   double k_roll = 0.1;
   double k_pitch = 0.2;
+  // 模拟欧拉角旋转
   Eigen::Vector3d eulerAngles(
       k_roll * cos(t), k_pitch * sin(t),
       K * t);  // roll ~ [-0.2, 0.2], pitch ~ [-0.3, 0.3], yaw ~ [0,2pi]
+  // 欧拉角旋转的导数
   Eigen::Vector3d eulerAnglesRates(-k_roll * sin(t), k_pitch * cos(t),
                                    K);  // euler angles 的导数
 
@@ -118,14 +139,18 @@ MotionData IMU::MotionModel(double t) {
   //    yaw ~ [0,2pi] Eigen::Vector3d eulerAnglesRates(0.,0. , K);      // euler
   //    angles 的导数
 
+  // 把欧拉角转换到旋转矩阵
   Eigen::Matrix3d Rwb =
       euler2Rotation(eulerAngles);  // body frame to world frame
+  // 把欧拉角速度转换到body坐标系下
   Eigen::Vector3d imu_gyro =
       eulerRates2bodyRates(eulerAngles) *
       eulerAnglesRates;  //  euler rates trans to body gyro
 
+  // 东北天下的重力加速度
   Eigen::Vector3d gn(0, 0, -9.81);  //  gravity in navigation frame(ENU)   ENU
                                     //  (0,0,-9.81)  NED(0,0,9,81)
+  // IMU加速度转到body坐标系下
   Eigen::Vector3d imu_acc =
       Rwb.transpose() * (ddp - gn);  //  Rbw * Rwn * gn = gs
 
@@ -152,8 +177,7 @@ void IMU::testImu(std::string src, std::string dist) {
   Eigen::Quaterniond Qwb(init_Rwb_);    // quaterniond:  from imu measurements
   Eigen::Vector3d Vw = init_velocity_;  // velocity  :   from imu measurements
   Eigen::Vector3d gw(0, 0, -9.81);      // ENU frame
-  Eigen::Vector3d temp_a;
-  Eigen::Vector3d theta;
+
   for (int i = 1; i < imudata.size(); ++i) {
     MotionData imupose = imudata[i];
 
@@ -167,21 +191,43 @@ void IMU::testImu(std::string src, std::string dist) {
     dq.normalize();
 
     /// imu 动力学模型 欧拉积分
-    Eigen::Vector3d acc_w = Qwb * (imupose.imu_acc) +
-                            gw;  // aw = Rwb * ( acc_body - acc_bias ) + gw
+    // aw = Rwb * ( acc_body - acc_bias ) + gw
+    // 注意这里的符号是+gw
+    Eigen::Vector3d acc_w = Qwb * (imupose.imu_acc) + gw;
+
     Qwb = Qwb * dq;
     Pwb = Pwb + Vw * dt + 0.5 * dt * dt * acc_w;
     Vw = Vw + acc_w * dt;
 
-    /// 中值积分
+    /// 中值积分 中值积分暂时没有实现
+    /// ......
 
-    // 　按着imu postion, imu quaternion , cam postion, cam quaternion
+    // 按着imu postion, imu quaternion , cam postion, cam quaternion
     // 的格式存储，由于没有cam，所以imu存了两次
-    save_points << imupose.timestamp << " " << Qwb.w() << " " << Qwb.x() << " "
-                << Qwb.y() << " " << Qwb.z() << " " << Pwb(0) << " " << Pwb(1)
-                << " " << Pwb(2) << " " << Qwb.w() << " " << Qwb.x() << " "
-                << Qwb.y() << " " << Qwb.z() << " " << Pwb(0) << " " << Pwb(1)
-                << " " << Pwb(2) << " " << std::endl;
+    // save_points << imupose.timestamp << " " << Qwb.w() << " " << Qwb.x() << "
+    // "
+    //             << Qwb.y() << " " << Qwb.z() << " " << Pwb(0) << " " <<
+    //             Pwb(1)
+    //             << " " << Pwb(2) << " " << Qwb.w() << " " << Qwb.x() << " "
+    //             << Qwb.y() << " " << Qwb.z() << " " << Pwb(0) << " " <<
+    //             Pwb(1)
+    //             << " " << Pwb(2) << " " << std::endl;
+
+    const int setw_width_ = 15;
+    save_points << std::setw(setw_width_) << std::left << imupose.timestamp
+                << std::setw(setw_width_) << std::left << Qwb.w()
+                << std::setw(setw_width_) << std::left << Qwb.x()
+                << std::setw(setw_width_) << std::left << Qwb.y()
+                << std::setw(setw_width_) << std::left << Qwb.z()
+                << std::setw(setw_width_) << std::left << Pwb(0)
+                << std::setw(setw_width_) << std::left << Pwb(1)
+                << std::setw(setw_width_) << std::left << Pwb(2)
+                << std::setw(setw_width_) << std::left << 0
+                << std::setw(setw_width_) << std::left << 0
+                << std::setw(setw_width_) << std::left << 0
+                << std::setw(setw_width_) << std::left << 0
+                << std::setw(setw_width_) << std::left << 0
+                << std::setw(setw_width_) << std::left << 0 << std::endl;
   }
 
   std::cout << "test　end" << std::endl;

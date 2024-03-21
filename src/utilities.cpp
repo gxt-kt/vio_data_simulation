@@ -1,7 +1,10 @@
 //
 // Created by hyj on 18-1-19.
 //
+
 #include "utilities.h"
+
+#include <iomanip>  // 包含头文件以使用 std::setw 和 std::left
 
 void save_points(
     std::string filename,
@@ -96,7 +99,7 @@ void LoadPose(std::string filename, std::vector<MotionData>& pose) {
   }
 }
 
-void save_Pose(std::string filename, std::vector<MotionData> pose) {
+void save_Pose(std::string filename, const std::vector<MotionData>& pose) {
   std::ofstream save_points;
   save_points.open(filename.c_str());
 
@@ -108,10 +111,28 @@ void save_Pose(std::string filename, std::vector<MotionData> pose) {
     Eigen::Vector3d gyro = data.imu_gyro;
     Eigen::Vector3d acc = data.imu_acc;
 
-    save_points << time << " " << q.w() << " " << q.x() << " " << q.y() << " "
-                << q.z() << " " << t(0) << " " << t(1) << " " << t(2) << " "
-                << gyro(0) << " " << gyro(1) << " " << gyro(2) << " " << acc(0)
-                << " " << acc(1) << " " << acc(2) << " " << std::endl;
+    const int setw_width_ = 15;
+    save_points << std::setw(setw_width_) << std::left << time
+                << std::setw(setw_width_) << std::left << q.w()
+                << std::setw(setw_width_) << std::left << q.x()
+                << std::setw(setw_width_) << std::left << q.y()
+                << std::setw(setw_width_) << std::left << q.z()
+                << std::setw(setw_width_) << std::left << t(0)
+                << std::setw(setw_width_) << std::left << t(1)
+                << std::setw(setw_width_) << std::left << t(2)
+                << std::setw(setw_width_) << std::left << gyro(0)
+                << std::setw(setw_width_) << std::left << gyro(1)
+                << std::setw(setw_width_) << std::left << gyro(2)
+                << std::setw(setw_width_) << std::left << acc(0)
+                << std::setw(setw_width_) << std::left << acc(1)
+                << std::setw(setw_width_) << std::left << acc(2) << std::endl;
+
+    // save_points << time << " " << q.w() << " " << q.x() << " " << q.y() << "
+    // "
+    //             << q.z() << " " << t(0) << " " << t(1) << " " << t(2) << " "
+    //             << gyro(0) << " " << gyro(1) << " " << gyro(2) << " " <<
+    //             acc(0)
+    //             << " " << acc(1) << " " << acc(2) << " " << std::endl;
   }
 }
 

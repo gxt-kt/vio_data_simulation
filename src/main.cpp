@@ -9,14 +9,24 @@
 #include "imu.h"
 #include "utilities.h"
 
+const std::string HOUSE_FILE = "house_model/house.txt";
+const std::string SAVE_POINTS_FILE = "all_points.txt";
+
 using Point = Eigen::Vector4d;
 using Points = std::vector<Point, Eigen::aligned_allocator<Point> >;
 using Line = std::pair<Eigen::Vector4d, Eigen::Vector4d>;
 using Lines = std::vector<Line, Eigen::aligned_allocator<Line> >;
 
-void CreatePointsLines(Points& points, Lines& lines) {
+/*
+ * 传入的文件，每一行代表两个点，前三个是一组xyz，后三个是一组xyz
+ * 然后把所有点不重复的插入到points中
+ * 并且每一行的两个点组成一个边，插入到边中
+ * 然后就把所有的点保存到文件save_points_file中
+ */
+void CreatePointsLines(std::string file, std::string save_points_file,
+                       Points& points, Lines& lines) {
   std::ifstream f;
-  f.open("house_model/house.txt");
+  f.open(file);
 
   while (!f.eof()) {
     std::string s;
@@ -58,15 +68,16 @@ void CreatePointsLines(Points& points, Lines& lines) {
     }
   }
 
+  // 下面的代码只是为了增加观测点，可以完全不用加，加了也行
   // create more 3d points, you can comment this code
-  int n = points.size();
-  for (int j = 0; j < n; ++j) {
-    Eigen::Vector4d p = points[j] + Eigen::Vector4d(0.5, 0.5, -0.5, 0);
-    points.push_back(p);
-  }
+  // int n = points.size();
+  // for (int j = 0; j < n; ++j) {
+  //   Eigen::Vector4d p = points[j] + Eigen::Vector4d(0.5, 0.5, -0.5, 0);
+  //   points.push_back(p);
+  // }
 
   // save points
-  save_points("all_points.txt", points);
+  save_points(save_points_file, points);
 }
 
 int main() {
@@ -92,7 +103,7 @@ int main() {
   // 生成3d points
   Points points;
   Lines lines;
-  CreatePointsLines(points, lines);
+  CreatePointsLines(HOUSE_FILE, SAVE_POINTS_FILE, points, lines);
 
   // IMU model
   Param params;
@@ -100,6 +111,12 @@ int main() {
 
   // create imu data
   // imu pose gyro acc
+  // imudata 产生的运动轨迹是20s
+  // 实际仿出来的位置路径是一个xy组成了椭圆，z呈波浪状
+  // x=15cos(PI/10*t)+5
+  // y=20sin(PI/10*t)+5
+  // z=sin(PI*t)+5
+  // 其中t会从0s走到20s
   std::vector<MotionData> imudata;
   std::vector<MotionData> imudata_noise;
   for (float t = params.t_start; t < params.t_end;) {
@@ -107,6 +124,7 @@ int main() {
     imudata.push_back(data);
 
     // add imu noise
+    // 在data的基础上添加噪声
     MotionData data_noise = data;
     imuGen.addIMUnoise(data_noise);
     imudata_noise.push_back(data_noise);
@@ -119,9 +137,9 @@ int main() {
   save_Pose("imu_pose.txt", imudata);
   save_Pose("imu_pose_noise.txt", imudata_noise);
 
-  imuGen.testImu("imu_pose.txt",
-                 "imu_int_pose.txt");  // test the imu data, integrate the imu
-                                       // data to generate the imu trajecotry
+  // test the imu data, integrate the data to generate the imu trajecotryimu
+  imuGen.testImu("imu_pose.txt", "imu_int_pose.txt");
+
   imuGen.testImu("imu_pose_noise.txt", "imu_int_pose_noise.txt");
 
   // cam pose
@@ -143,6 +161,7 @@ int main() {
   save_Pose_asTUM("cam_pose_tum.txt", camdata);
 
   // points obs in image
+  // 总共600副图像，1s30副图像
   for (int n = 0; n < camdata.size(); ++n) {
     MotionData data = camdata[n];
     Eigen::Matrix4d Twc = Eigen::Matrix4d::Identity();
@@ -162,11 +181,14 @@ int main() {
 
       if (pc1(2) < 0) continue;  // z必须大于０,在摄像机坐标系前方
 
+      // obs存放的是特征点对应相机归一化平面的点
       Eigen::Vector2d obs(pc1(0) / pc1(2), pc1(1) / pc1(2));
       // if( (obs(0)*460 + 255) < params.image_h && ( obs(0) * 460 + 255) > 0 &&
       // (obs(1)*460 + 255) > 0 && ( obs(1)* 460 + 255) < params.image_w )
       {
+        // points是特征点在世界坐标系下的点，第四个参数永远为1
         points_cam.push_back(points[i]);
+        // obs是特征点在相机归一化平面下的点
         features_cam.push_back(obs);
       }
     }
@@ -178,6 +200,7 @@ int main() {
   }
 
   // lines obs in image
+  // 总共600副图像，1s30副图像
   for (int n = 0; n < camdata.size(); ++n) {
     MotionData data = camdata[n];
     Eigen::Matrix4d Twc = Eigen::Matrix4d::Identity();
@@ -201,6 +224,7 @@ int main() {
 
       if (pc1(2) < 0 || pc2(2) < 0) continue;  // z必须大于０,在摄像机坐标系前方
 
+      // obs是线的两点在相机归一化平面上的表示
       Eigen::Vector4d obs(pc1(0) / pc1(2), pc1(1) / pc1(2), pc2(0) / pc2(2),
                           pc2(1) / pc2(2));
       // if(obs(0) < params.image_h && obs(0) > 0 && obs(1)> 0 && obs(1) <

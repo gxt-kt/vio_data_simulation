@@ -17,13 +17,13 @@ struct MotionData {
   double timestamp;
   Eigen::Matrix3d Rwb;
   Eigen::Vector3d twb;
-  Eigen::Vector3d imu_acc;
-  Eigen::Vector3d imu_gyro;
+  Eigen::Vector3d imu_acc;   // 在body系下的加速度
+  Eigen::Vector3d imu_gyro;  // 在body系下的角速度
 
-  Eigen::Vector3d imu_gyro_bias;
-  Eigen::Vector3d imu_acc_bias;
+  Eigen::Vector3d imu_acc_bias;   // 在body系下的加速度偏置
+  Eigen::Vector3d imu_gyro_bias;  // 在body系下的角速度偏置
 
-  Eigen::Vector3d imu_velocity;
+  Eigen::Vector3d imu_velocity;  // 在Word系下的速度
 };
 
 // euler2Rotation:   body frame to interitail frame

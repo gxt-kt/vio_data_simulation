@@ -36,7 +36,7 @@ void save_lines(
 void LoadPose(std::string filename, std::vector<MotionData>& pose);
 
 // save imu body data
-void save_Pose(std::string filename, std::vector<MotionData> pose);
+void save_Pose(std::string filename, const std::vector<MotionData>& pose);
 
 // save pose as TUM style
 void save_Pose_asTUM(std::string filename, std::vector<MotionData> pose);
