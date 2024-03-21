@@ -150,6 +150,14 @@ MotionData IMU::MotionModel(double t) {
   // 东北天下的重力加速度
   Eigen::Vector3d gn(0, 0, -9.81);  //  gravity in navigation frame(ENU)   ENU
                                     //  (0,0,-9.81)  NED(0,0,9,81)
+
+  /* 当加速度计各轴和东北天坐标系对齐，根据受力平衡，f+mg=ma.
+   * 加速度计通过测量 f 得到加速度测量，
+   * 即imu_acc，imu_acc = f/m = a - g.
+   * 当加速度计各轴和东北天坐标系不对齐，Rwb*f + mg = ma，
+   * 得出 imu_acc = Rbw(a-g)。以上推导与g的正负无关。东北天下g=(0,0,-9.81)。
+   */
+
   // IMU加速度转到body坐标系下
   Eigen::Vector3d imu_acc =
       Rwb.transpose() * (ddp - gn);  //  Rbw * Rwn * gn = gs
@@ -193,6 +201,16 @@ void IMU::testImu(std::string src, std::string dist) {
     /// imu 动力学模型 欧拉积分
     // aw = Rwb * ( acc_body - acc_bias ) + gw
     // 注意这里的符号是+gw
+    //
+    /* 当加速度计各轴和东北天坐标系对齐，根据受力平衡，f+mg=ma.
+     * 加速度计通过测量 f 得到加速度测量，
+     * 即imu_acc，imu_acc = f/m = a - g.
+     * 当加速度计各轴和东北天坐标系不对齐，Rwb*f + mg = ma，
+     * 得出 imu_acc = Rbw(a-g)。以上推导与g的正负无关。东北天下g=(0,0,-9.81)。
+     */
+    // 上面的倒推就得到了下式
+    // acc_w是世界坐标系下的加速度
+    // imu_acc是body坐标系下的加速度
     Eigen::Vector3d acc_w = Qwb * (imupose.imu_acc) + gw;
 
     Qwb = Qwb * dq;
