@@ -187,6 +187,9 @@ void IMU::testImu(std::string src, std::string dist) {
   Eigen::Vector3d gw(0, 0, -9.81);      // ENU frame
 
   for (int i = 1; i < imudata.size(); ++i) {
+    // 设置0是欧拉积分，1是中值积分
+#if 1
+    // 欧拉积分
     MotionData imupose = imudata[i];
 
     // delta_q = [1 , 1/2 * thetax , 1/2 * theta_y, 1/2 * theta_z]
@@ -217,8 +220,38 @@ void IMU::testImu(std::string src, std::string dist) {
     Pwb = Pwb + Vw * dt + 0.5 * dt * dt * acc_w;
     Vw = Vw + acc_w * dt;
 
+#else
     /// 中值积分 中值积分暂时没有实现
-    /// ......
+    MotionData imupose_pre = imudata[i - 1];
+    MotionData imupose = imudata[i];
+    MotionData imupose_mean = imudata[i];
+    imupose_mean.imu_gyro = (imupose_pre.imu_gyro + imupose.imu_gyro) / 2.0;
+
+    Eigen::Quaterniond dq;
+    Eigen::Vector3d dtheta_half = (imupose_mean.imu_gyro) * dt / 2.0;
+    dq.w() = 1;
+    dq.x() = dtheta_half.x();
+    dq.y() = dtheta_half.y();
+    dq.z() = dtheta_half.z();
+
+    // 　imu 动力学模型　参考svo预积分论文
+    Eigen::Vector3d acc_w = Qwb * (imupose_pre.imu_acc) +
+                            gw;  // aw = Rwb * ( acc_body - acc_bias ) + gw
+
+    // 同样需要注意的是, P、V、Q
+    // 三个值的更新顺序,因为相互之间有继承
+    // 所以应该先更新Q ,再更新P ,最后更新V,源代码这里有问题,和公式对应不上!
+    Qwb = Qwb * dq;  // 获得Qwb_k+1
+
+    // Qwb+1
+    Eigen::Vector3d acc_w1 = Qwb * (imupose.imu_acc) +
+                             gw;  // aw = Rwb * ( acc_body - acc_bias ) + gw
+    acc_w = (acc_w + acc_w1) / 2.0;
+    // a update
+    Vw = Vw + acc_w * dt;
+    // Pwb update
+    Pwb = Pwb + Vw * dt + 0.5 * dt * dt * acc_w;
+#endif
 
     // 按着imu postion, imu quaternion , cam postion, cam quaternion
     // 的格式存储，由于没有cam，所以imu存了两次
