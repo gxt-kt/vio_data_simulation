@@ -4,3 +4,5 @@ bin/keyframe/
 bin/*.txt
 *~
 *.DS_Store
+.cache
+bin/data_gen

@@ -17,7 +17,7 @@ we also create a ros_version in ros_version branch.
 目前，imu的z轴向上，xy平面内做椭圆运动，z轴做正弦运动，x轴沿着圆周向外。外参数Tbc将相机坐标旋转，使得相机朝向特征点。
 
 ## 代码结构
-main/gener_alldata.cpp : 用于生成imu数据，相机轨迹，特征点像素坐标，特征点的3d坐标
+src/main.cpp : 用于生成imu数据，相机轨迹，特征点像素坐标，特征点的3d坐标
 
 src/paramc.h：imu噪声参数，imu频率，相机内参数等等
 
